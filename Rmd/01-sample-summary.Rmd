@@ -1,0 +1,190 @@
+---
+title: "01-sample-summary"
+author: "diana baetscher"
+date: "2025-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load-libraries-and-data}
+library(tidyverse)
+library(readxl)
+
+
+# load data
+samps24 <- read_xlsx("../data/2024FinClipsforGenetics.xlsx", sheet = "Samples")
+samps25 <- read_xlsx("../data/2025GeneticsSamples.xlsx", sheet = "Samples")
+
+```
+
+```{r}
+df24 <- samps24 %>%
+  filter(Species == "Pacific cod") %>%
+  filter(`Total Length` != "?") %>%
+  mutate(length = as.numeric(`Total Length`)) %>%
+  mutate(year = "2024") %>%
+  rename(lon = Long, lat = Lat)
+
+comb_df <- samps25 %>%
+  filter(Species == "PCOD") %>%
+  mutate(length = as.numeric(TL)) %>%
+  mutate(year = "2025") %>%
+  rename(lon = LONGITUDE, lat = LATITUDE) %>%
+  bind_rows(df24) %>%
+  mutate(Location = str_to_title(Location)) %>% # fix formatting
+  mutate(lon = -1*lon) # these are near Kodiak, so we'll correct this confusion.
+
+
+comb_df %>%
+  ggplot(aes(x = length)) +
+  geom_bar(stat = "count") +
+  facet_grid(rows = vars(year)) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(
+    x = "total length (mm)",
+    y = "number of samples"
+  )
+
+
+```
+
+
+```{r what-about-size-distribution-by-location?}
+comb_df %>%
+  group_by(Location, year) %>%
+  add_tally() %>%
+  filter(n > 10) %>% # minimum number of samples per sampling location per year
+  ggplot(aes(x = length)) +
+  geom_bar(stat = "count") +
+  facet_grid(rows = vars(year), cols = vars(Location)) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(
+    x = "total length (mm)",
+    y = "number of samples"
+  )
+
+```
+
+Which sites are west of Kodiak?
+
+
+
+
+
+```{r}
+tmp_df <- comb_df %>%
+  mutate(Location = ifelse(Location == "Big Bite", "Big Bight", Location)) %>%
+  mutate(Location = ifelse(Location == "Castle", "Castle Bay", Location)) %>%
+  group_by(Location, year) %>%
+  add_tally() %>%
+  filter(n > 5) # minimum number of samples per sampling location per year
+ 
+
+```
+
+
+```{r basic-map}
+library(sf)  
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(patchwork)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+pacific_map <- ggplot(data = world) +
+  geom_sf() +
+  coord_sf(xlim = c(-165, -150), 
+           ylim = c(59, 54), 
+           expand = FALSE) +
+  theme_bw()
+
+
+pacific_map +
+  geom_point(data = tmp_df, aes(x = lon, y = lat), 
+              stroke = 0.2, color = "gray20", 
+              shape = 21, fill = "darkblue", 
+              alpha = 0.7, size = 1.2) 
+  
+
+```
+
+```{r select-sites}
+#library(ggrepel)
+
+p <- tmp_df %>%
+  ungroup() %>%
+  filter(lon < -155) %>%
+  arrange(Location) %>%
+  select(Location, lat, lon) %>%
+  unique() %>%
+  group_by(Location) %>%
+  mutate(index = row_number()) %>%
+  ungroup() %>%
+  filter(index == 1)
+  
+w_kodiak_sites <- pacific_map +
+  geom_point(data = p, aes(x = lon, y = lat), 
+              color = "blue", alpha = 0.7, size = 1.2) +
+  geom_text_repel(data = p,  aes(lon, lat, label = Location),
+            hjust = -0.1, vjust = -0.5, size = 3, min.segment.length = 0,
+                  seed = 123) +
+  labs(
+    x = "Longitude",
+    y = "Latitude"
+  ) +
+  scale_x_continuous(breaks = c(-160, -155, -150))
+
+w_kodiak_sites
+
+ggsave("outputs/pcod_age0_map.png")
+```
+
+```{r}
+samples_by_size <- tmp_df %>%
+  ungroup() %>%
+  filter(lon < -156) %>%
+  filter(length < 150) %>%
+  ggplot(aes(x = length)) +
+  geom_bar(stat = "count") +
+  facet_grid(rows = vars(year), cols = vars(reorder(Location, lon)), scales = "free_y") +
+  theme_bw() +
+  theme(
+    strip.text = element_text(size = 5),
+    axis.title = element_text(size = 6),
+    axis.text = element_text(size = 5)
+  ) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(
+    x = "total length (mm)",
+    y = "number of samples"
+  ) +
+  scale_x_continuous(breaks = c(20,40,60)) +
+  scale_y_continuous(breaks = c(2,4,6))
+  
+samples_by_size
+ggsave("outputs/samples.png", width = 8, height = 2)
+
+```
+
+Plenty of samples to choose from in 2024, but less so in 2025.
+
+Ok, let's take away the 10 sample per site limit.
+
+
+```{r combine-plots}
+#w_kodiak_sites / samples_by_size + plot_layout(heights = c(2, 1))
+
+#ggsave("outputs/samples.png", width = 8, height = 5)
+```
+
+
+
+
+
+
