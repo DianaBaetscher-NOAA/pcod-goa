@@ -82,8 +82,8 @@ tmp_df <- comb_df %>%
   mutate(Location = ifelse(Location == "Big Bite", "Big Bight", Location)) %>%
   mutate(Location = ifelse(Location == "Castle", "Castle Bay", Location)) %>%
   group_by(Location, year) %>%
-  add_tally() %>%
-  filter(n > 5) # minimum number of samples per sampling location per year
+  add_tally() #%>%
+  #filter(n > 5) # minimum number of samples per sampling location per year
  
 
 ```
@@ -99,8 +99,8 @@ world <- ne_countries(scale = "medium", returnclass = "sf")
 
 pacific_map <- ggplot(data = world) +
   geom_sf() +
-  coord_sf(xlim = c(-165, -150), 
-           ylim = c(59, 54), 
+  coord_sf(xlim = c(-165, -145), 
+           ylim = c(61, 54), 
            expand = FALSE) +
   theme_bw()
 
